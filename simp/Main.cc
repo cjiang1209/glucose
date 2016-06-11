@@ -193,6 +193,8 @@ int main(int argc, char** argv)
         gzFile in = (argc == 1) ? gzdopen(0, "rb") : gzopen(argv[1], "rb");
         if (in == NULL)
             printf("ERROR! Could not open file: %s\n", argc == 1 ? "<stdin>" : argv[1]), exit(1);
+
+        printf("c File: %s\n", argc == 1 ? "" : argv[1]);
         
       if (S.verbosity > 0){
             printf("c ========================================[ Problem Statistics ]===========================================\n");

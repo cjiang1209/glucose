@@ -267,6 +267,10 @@ protected:
         VarOrderLt(const vec<double>&  act) : activity(act) { }
     };
 
+    struct VarRel {
+    	Var prev;
+    	Var next;
+    };
 
     // Solver state:
     //
@@ -303,6 +307,7 @@ protected:
     int  reduceOnSizeSize;                // See XMinisat paper
     vec<unsigned int>   permDiff;           // permDiff[var] contains the current conflict number... Used to count the number of  LBD
     
+    vec<VarRel> var_rels;
 
     // UPDATEVARACTIVITY trick (see competition'09 companion paper)
     vec<Lit> lastDecisionLevel; 
@@ -399,6 +404,9 @@ protected:
     bool     withinBudget     ()      const;
     inline bool isSelector(Var v) {return (incremental && v>nbVarsInitialFormula);}
 
+    // FORCE variable ordering heuristic
+    void force();
+
     // Static helpers:
     //
 
@@ -427,15 +435,51 @@ inline void Solver::insertVarOrder(Var x) {
 inline void Solver::varDecayActivity() { var_inc *= (1 / var_decay); }
 inline void Solver::varBumpActivity(Var v) { varBumpActivity(v, var_inc); }
 inline void Solver::varBumpActivity(Var v, double inc) {
+	bool rescale = false;
     if ( (activity[v] += inc) > 1e100 ) {
-        // Rescale:
-        for (int i = 0; i < nVars(); i++)
-            activity[i] *= 1e-100;
-        var_inc *= 1e-100; }
+    	rescale = true;
+    }
+    // Update order_heap with respect to new activity
+    if (order_heap.inHeap(v)) {
+    	order_heap.decrease(v);
+    }
 
-    // Update order_heap with respect to new activity:
-    if (order_heap.inHeap(v))
-        order_heap.decrease(v); }
+    // Bump the variables close to the given variable
+    Var next = v;
+    for (int i = 0; i < 10; i++) {
+    	next = var_rels[next].next;
+    	if (next == 0) {
+    		break;
+    	}
+    	if ( (activity[next] += ((0.2 - i * 0.02) * inc)) > 1e100 ) {
+    		rescale = true;
+    	}
+    	if (order_heap.inHeap(next)) {
+    	    order_heap.decrease(next);
+    	}
+    }
+    Var prev = v;
+    for (int i = 0; i < 10; i++) {
+    	prev = var_rels[prev].prev;
+    	if (prev == 0) {
+    		break;
+    	}
+    	if ( (activity[prev] += ((0.2 - i * 0.02) * inc)) > 1e100 ) {
+    		rescale = true;
+    	}
+    	if (order_heap.inHeap(prev)) {
+    		order_heap.decrease(prev);
+    	}
+    }
+
+    // Rescale
+    if (rescale) {
+        for (int i = 0; i < nVars(); i++) {
+            activity[i] *= 1e-100;
+        }
+        var_inc *= 1e-100;
+    }
+}
 
 inline void Solver::claDecayActivity() { cla_inc *= (1 / clause_decay); }
 inline void Solver::claBumpActivity (Clause& c) {

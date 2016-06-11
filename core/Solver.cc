@@ -54,6 +54,8 @@ OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWA
 #include "core/Solver.h"
 #include "core/Constants.h"
 
+#include "core/Force.h"
+
 using namespace Glucose;
 
 //=================================================================================================
@@ -328,6 +330,9 @@ Var Solver::newVar(bool sign, bool dvar) {
     decision .push();
     trail .capacity(v + 1);
     setDecisionVar(v, dvar);
+
+    var_rels.push({0, 0});
+
     return v;
 }
 
@@ -1291,10 +1296,11 @@ lbool Solver::search(int nof_conflicts) {
                 var_decay += 0.01;
 
             if (verbosity >= 1 && conflicts % verbEveryConflicts == 0) {
-                printf("c | %8d   %7d    %5d | %7d %8d %8d | %5d %8d   %6d %8d | %6.3f %% |\n",
+                printf("c | %8d   %7d    %5d | %7d %8d %8d | %5d %8d   %6d %8d | %6.3f %% | %6.3f s |\n",
                         (int) starts, (int) nbstopsrestarts, (int) (conflicts / starts),
                         (int) dec_vars - (trail_lim.size() == 0 ? trail.size() : trail_lim[0]), nClauses(), (int) clauses_literals,
-                        (int) nbReduceDB, nLearnts(), (int) nbDL2, (int) nbRemovedClauses, progressEstimate()*100);
+                        (int) nbReduceDB, nLearnts(), (int) nbDL2, (int) nbRemovedClauses, progressEstimate()*100,
+						cpuTime());
             }
             if (decisionLevel() == 0) {
                 return l_False;
@@ -1490,6 +1496,9 @@ lbool Solver::solve_(bool do_simp, bool turn_off_simp) // Parameters are useless
       printf("c |       NB   Blocked  Avg Cfc |    Vars  Clauses Literals |   Red   Learnts    LBD2  Removed |          |\n");
       printf("c =========================================================================================================\n");
     }
+
+    // Use FORCE to compute the relations of variables
+    force();
 
     // Search:
     int curr_restarts = 0;
@@ -1705,4 +1714,22 @@ bool Solver::parallelJobIsFinished() {
 }
 
 void Solver::parallelImportClauseDuringConflictAnalysis(Clause &c,CRef confl) {
+}
+
+void Solver::force()
+{
+	double startTime = cpuTime();
+
+	Force f(ca, clauses);
+	vec<Var> order;
+	f.execute(order);
+
+	var_rels[order[0]] = {0, order[1]};
+	for (int i = 1; i < order.size() - 1; i++) {
+		var_rels[order[i]] = {order[i - 1], order[i + 1]};
+	}
+	var_rels[order.last()] = {order[order.size() - 2], 0};
+
+	double endTime = cpuTime();
+	printf("c FORCE time: %.4f s\n", endTime - startTime);
 }
