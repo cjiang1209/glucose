@@ -132,6 +132,7 @@ verbosity(0)
 , originalClausesSeen(0)
 , sumDecisionLevels(0)
 , nbRemovedClauses(0), nbRemovedUnaryWatchedClauses(0), nbReducedClauses(0), nbDL2(0), nbBin(0), nbUn(0), nbReduceDB(0)
+, nbDipClauses(0)
 , solves(0), starts(0), decisions(0), rnd_decisions(0), propagations(0), conflicts(0), conflictsRestarts(0)
 , nbstopsrestarts(0), nbstopsrestartssame(0), lastblockatrestart(0)
 , dec_vars(0), clauses_literals(0), learnts_literals(0), max_literals(0), tot_literals(0)
@@ -661,6 +662,11 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt,vec<Lit>&selectors, int& o
     Lit p = lit_Undef;
 
 
+    bool done = false;
+    vec<Lit> dip_learnt;
+    dip_learnt.push(lit_Undef);
+    dip_learnt.push(lit_Undef);
+
     // Generate conflict clause:
     //
     out_learnt.push(); // (leave room for the asserting literal)
@@ -718,16 +724,35 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt,vec<Lit>&selectors, int& o
                         if(isSelector(var(q))) {
                             assert(value(q) == l_False);
                             selectors.push(q);
-                        } else 
+                        } else {
                             out_learnt.push(q);
+                            if (!done) {
+                            	dip_learnt.push(q);
+                            }
+                        }
                    }
                 }
+            }
+            else {
+            	seen[var(q)]++;
             }
         }
 
         // Select next clause to look at:
         while (!seen[var(trail[index--])]);
         p = trail[index + 1];
+
+        if (!done && pathC == 2) {
+        	int idx = index;
+        	while (seen[var(trail[idx--])] == 0);
+        	Lit p2 = trail[idx + 1];
+        	if (seen[var(p)] + seen[var(p2)] > 2) {
+        		dip_learnt[0] = ~p2;
+        		dip_learnt[1] = ~p;
+        		done = true;
+        	}
+        }
+
         confl = reason(var(p));
         seen[var(p)] = 0;
         pathC--;
@@ -770,6 +795,23 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt,vec<Lit>&selectors, int& o
         }
     } else
         i = j = out_learnt.size();
+
+    // Add DIP Clause
+    if (done && dip_learnt[0] != out_learnt[0]) {
+    	unsigned int dip_lbd = computeLBD(dip_learnt, out_learnt.size()-selectors.size());
+
+    	CRef cr = ca.alloc(dip_learnt, true);
+    	ca[cr].setLBD(dip_lbd);
+    	ca[cr].setOneWatched(false);
+    	ca[cr].setSizeWithoutSelectors(dip_learnt.size());
+    	if (dip_lbd <= 2) nbDL2++; // stats
+    	if (ca[cr].size() == 2) nbBin++; // stats
+    	learnts.push(cr);
+    	attachClause(cr);
+    	claBumpActivity(ca[cr]);
+
+    	nbDipClauses++;
+    }
 
     max_literals += out_learnt.size();
     out_learnt.shrink(i - j);
@@ -1291,10 +1333,11 @@ lbool Solver::search(int nof_conflicts) {
                 var_decay += 0.01;
 
             if (verbosity >= 1 && conflicts % verbEveryConflicts == 0) {
-                printf("c | %8d   %7d    %5d | %7d %8d %8d | %5d %8d   %6d %8d | %6.3f %% |\n",
+                printf("c | %8d   %7d    %5d | %7d %8d %8d | %5d %8d   %6d %8d | %6.3f %% | %6d %6d |\n",
                         (int) starts, (int) nbstopsrestarts, (int) (conflicts / starts),
                         (int) dec_vars - (trail_lim.size() == 0 ? trail.size() : trail_lim[0]), nClauses(), (int) clauses_literals,
-                        (int) nbReduceDB, nLearnts(), (int) nbDL2, (int) nbRemovedClauses, progressEstimate()*100);
+                        (int) nbReduceDB, nLearnts(), (int) nbDL2, (int) nbRemovedClauses, progressEstimate()*100,
+						(int) conflicts, (int) nbDipClauses);
             }
             if (decisionLevel() == 0) {
                 return l_False;
@@ -1486,8 +1529,8 @@ lbool Solver::solve_(bool do_simp, bool turn_off_simp) // Parameters are useless
       printf("c ==================================[ Search Statistics (every %6d conflicts) ]=========================\n",verbEveryConflicts);
       printf("c |                                                                                                       |\n"); 
 
-      printf("c |          RESTARTS           |          ORIGINAL         |              LEARNT              | Progress |\n");
-      printf("c |       NB   Blocked  Avg Cfc |    Vars  Clauses Literals |   Red   Learnts    LBD2  Removed |          |\n");
+      printf("c |          RESTARTS           |          ORIGINAL         |              LEARNT              | Progress |    LEARNT     |\n");
+      printf("c |       NB   Blocked  Avg Cfc |    Vars  Clauses Literals |   Red   Learnts    LBD2  Removed |          | UIP    DIP    |\n");
       printf("c =========================================================================================================\n");
     }
 

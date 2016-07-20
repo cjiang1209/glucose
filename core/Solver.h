@@ -232,6 +232,8 @@ public:
     uint64_t nbRemovedClauses,nbRemovedUnaryWatchedClauses, nbReducedClauses,nbDL2,nbBin,nbUn,nbReduceDB,solves, starts, decisions, rnd_decisions, propagations, conflicts,conflictsRestarts,nbstopsrestarts,nbstopsrestartssame,lastblockatrestart;
     uint64_t dec_vars, clauses_literals, learnts_literals, max_literals, tot_literals;
 
+    uint64_t nbDipClauses;
+
 protected:
 
     long curRestart;
@@ -321,7 +323,7 @@ protected:
     // Temporaries (to reduce allocation overhead). Each variable is prefixed by the method in which it is
     // used, exept 'seen' wich is used in several places.
     //
-    vec<char>           seen;
+    vec<int>           seen;
     vec<Lit>            analyze_stack;
     vec<Lit>            analyze_toclear;
     vec<Lit>            add_tmp;
