@@ -324,6 +324,7 @@ Var Solver::newVar(bool sign, bool dvar) {
     vardata .push(mkVarData(CRef_Undef, 0));
     activity .push(rnd_init_act ? drand(random_seed) * 0.00001 : 0);
     seen .push(0);
+    seen2.push(0);
     permDiff .push(0);
     polarity .push(sign);
     decision .push();
@@ -595,6 +596,70 @@ void Solver::minimisationWithBinaryResolution(vec<Lit> &out_learnt) {
     }
 }
 
+void Solver::minimizeDIPClause(vec<Lit> &dip_learnt)
+{
+	if (dip_learnt.size() > 3) {
+		// Remove redundant literals
+//		analyze_toclear2.clear();
+
+		uint32_t abstract_levels = 0;
+		for (int i = 2; i < dip_learnt.size(); i++) {
+			abstract_levels |= abstractLevel(var(dip_learnt[i])); // (maintain an abstraction of levels involved in conflict)
+			seen2[var(dip_learnt[i])] = 1;
+			//analyze_toclear2.push(dip_learnt[i]);
+		}
+		dip_learnt.copyTo(analyze_toclear2);
+
+		int sz = 2;
+		for (int i = 2; i < dip_learnt.size(); i++) {
+			if (reason(var(dip_learnt[i])) == CRef_Undef || !litRedundant2(dip_learnt[i], abstract_levels)) {
+				dip_learnt[sz++] = dip_learnt[i];
+			}
+		}
+		dip_learnt.shrink(dip_learnt.size() - sz);
+
+		for (int i = 0; i < analyze_toclear2.size(); i++) {
+			seen2[var(analyze_toclear2[i])] = 0;
+		}
+	}
+
+	if (!incremental && dip_learnt.size() <= lbSizeMinimizingClause && dip_learnt.size() > 2) {
+		// Minimize with binary resolution
+		unsigned int lbd = computeLBD(dip_learnt);
+		if (lbd <= lbLBDMinimizingClause) {
+			MYFLAG++;
+
+			for (int i = 2; i < dip_learnt.size(); i++) {
+				permDiff[var(dip_learnt[i])] = MYFLAG;
+			}
+
+			bool reduced = false;
+			for (int i = 0; i < 2; i++) {
+				vec<Watcher>& wbin = watchesBin[~dip_learnt[i]];
+				for (int k = 0; k < wbin.size(); k++) {
+					Lit imp = wbin[k].blocker;
+					if (permDiff[var(imp)] == MYFLAG && value(imp) == l_True) {
+						reduced = true;
+						permDiff[var(imp)] = MYFLAG - 1;
+					}
+				}
+			}
+
+			if (reduced) {
+				int sz = 2;
+				for (int i = 2; i < dip_learnt.size(); i++) {
+					if (permDiff[var(dip_learnt[i])] == MYFLAG) {
+						dip_learnt[sz++] = dip_learnt[i];
+					}
+				}
+
+				assert(dip_learnt.size() > sz);
+				dip_learnt.shrink(dip_learnt.size() - sz);
+			}
+		}
+	}
+}
+
 // Revert to the state at given level (keeping all assignment at 'level' but not beyond).
 //
 
@@ -664,8 +729,8 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt,vec<Lit>&selectors, int& o
 
     bool done = false;
     vec<Lit> dip_learnt;
-    dip_learnt.push(lit_Undef);
-    dip_learnt.push(lit_Undef);
+    dip_learnt.push();
+    dip_learnt.push();
 
     // Generate conflict clause:
     //
@@ -796,23 +861,6 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt,vec<Lit>&selectors, int& o
     } else
         i = j = out_learnt.size();
 
-    // Add DIP Clause
-    if (done && dip_learnt[0] != out_learnt[0]) {
-    	unsigned int dip_lbd = computeLBD(dip_learnt, out_learnt.size()-selectors.size());
-
-    	CRef cr = ca.alloc(dip_learnt, true);
-    	ca[cr].setLBD(dip_lbd);
-    	ca[cr].setOneWatched(false);
-    	ca[cr].setSizeWithoutSelectors(dip_learnt.size());
-    	if (dip_lbd <= 2) nbDL2++; // stats
-    	if (ca[cr].size() == 2) nbBin++; // stats
-    	learnts.push(cr);
-    	attachClause(cr);
-    	claBumpActivity(ca[cr]);
-
-    	nbDipClauses++;
-    }
-
     max_literals += out_learnt.size();
     out_learnt.shrink(i - j);
     tot_literals += out_learnt.size();
@@ -827,6 +875,27 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt,vec<Lit>&selectors, int& o
     if (!incremental && out_learnt.size() <= lbSizeMinimizingClause) {
         minimisationWithBinaryResolution(out_learnt);
     }
+
+    // Add DIP Clause
+    if (done && dip_learnt[0] != out_learnt[0]) {
+    	assert(dip_learnt[1] != out_learnt[0]);
+    	minimizeDIPClause(dip_learnt);
+
+    	unsigned int dip_lbd = computeLBD(dip_learnt, dip_learnt.size() - selectors.size());
+
+    	CRef cr = ca.alloc(dip_learnt, true);
+    	ca[cr].setLBD(dip_lbd);
+    	ca[cr].setOneWatched(false);
+    	ca[cr].setSizeWithoutSelectors(dip_learnt.size());
+    	if (dip_lbd <= 2) nbDL2++; // stats
+    	if (ca[cr].size() == 2) nbBin++; // stats
+    	learnts.push(cr);
+    	attachClause(cr);
+    	claBumpActivity(ca[cr]);
+
+    	nbDipClauses++;
+    }
+
     // Find correct backtrack level:
     //
     if (out_learnt.size() == 1)
@@ -910,6 +979,47 @@ bool Solver::litRedundant(Lit p, uint32_t abstract_levels) {
     return true;
 }
 
+
+bool Solver::litRedundant2(Lit p, uint32_t abstract_levels)
+{
+	analyze_stack.clear();
+	analyze_stack.push(p);
+
+	int top = analyze_toclear2.size();
+	while (analyze_stack.size() > 0) {
+		assert(reason(var(analyze_stack.last())) != CRef_Undef);
+
+		Clause& c = ca[reason(var(analyze_stack.last()))];
+		analyze_stack.pop();
+		if (c.size() == 2 && value(c[0]) == l_False) {
+			assert(value(c[1]) == l_True);
+			Lit tmp = c[0];
+			c[0] = c[1], c[1] = tmp;
+		}
+
+		for (int i = 1; i < c.size(); i++) {
+			Lit lit = c[i];
+			if (!seen2[var(lit)]) {
+				if (level(var(lit)) > 0) {
+					if (reason(var(lit)) != CRef_Undef && (abstractLevel(var(lit)) & abstract_levels) != 0) {
+						seen2[var(lit)] = 1;
+						analyze_stack.push(lit);
+						analyze_toclear2.push(lit);
+					}
+					else {
+						for (int j = top; j < analyze_toclear2.size(); j++) {
+							seen2[var(analyze_toclear2[j])] = 0;
+						}
+						analyze_toclear2.shrink(analyze_toclear2.size() - top);
+						return false;
+					}
+				}
+			}
+		}
+	}
+
+	return true;
+}
 
 /*_________________________________________________________________________________________________
 |
@@ -1333,7 +1443,7 @@ lbool Solver::search(int nof_conflicts) {
                 var_decay += 0.01;
 
             if (verbosity >= 1 && conflicts % verbEveryConflicts == 0) {
-                printf("c | %8d   %7d    %5d | %7d %8d %8d | %5d %8d   %6d %8d | %6.3f %% | %6d %6d |\n",
+                printf("c | %8d   %7d    %5d | %7d %8d %8d | %5d %8d   %6d %8d | %6.3f %% | %7d %7d |\n",
                         (int) starts, (int) nbstopsrestarts, (int) (conflicts / starts),
                         (int) dec_vars - (trail_lim.size() == 0 ? trail.size() : trail_lim[0]), nClauses(), (int) clauses_literals,
                         (int) nbReduceDB, nLearnts(), (int) nbDL2, (int) nbRemovedClauses, progressEstimate()*100,
@@ -1529,8 +1639,8 @@ lbool Solver::solve_(bool do_simp, bool turn_off_simp) // Parameters are useless
       printf("c ==================================[ Search Statistics (every %6d conflicts) ]=========================\n",verbEveryConflicts);
       printf("c |                                                                                                       |\n"); 
 
-      printf("c |          RESTARTS           |          ORIGINAL         |              LEARNT              | Progress |    LEARNT     |\n");
-      printf("c |       NB   Blocked  Avg Cfc |    Vars  Clauses Literals |   Red   Learnts    LBD2  Removed |          | UIP    DIP    |\n");
+      printf("c |          RESTARTS           |          ORIGINAL         |              LEARNT              | Progress |     LEARNT      |\n");
+      printf("c |       NB   Blocked  Avg Cfc |    Vars  Clauses Literals |   Red   Learnts    LBD2  Removed |          | UIP     DIP     |\n");
       printf("c =========================================================================================================\n");
     }
 

@@ -324,8 +324,10 @@ protected:
     // used, exept 'seen' wich is used in several places.
     //
     vec<int>           seen;
+    vec<char>          seen2;
     vec<Lit>            analyze_stack;
     vec<Lit>            analyze_toclear;
+    vec<Lit>            analyze_toclear2;
     vec<Lit>            add_tmp;
     unsigned int  MYFLAG;
 
@@ -361,6 +363,7 @@ protected:
     void     analyze          (CRef confl, vec<Lit>& out_learnt, vec<Lit> & selectors, int& out_btlevel,unsigned int &nblevels,unsigned int &szWithoutSelectors);    // (bt = backtrack)
     void     analyzeFinal     (Lit p, vec<Lit>& out_conflict);                         // COULD THIS BE IMPLEMENTED BY THE ORDINARIY "analyze" BY SOME REASONABLE GENERALIZATION?
     bool     litRedundant     (Lit p, uint32_t abstract_levels);                       // (helper method for 'analyze()')
+    bool     litRedundant2    (Lit p, uint32_t abstract_levels);
     lbool    search           (int nof_conflicts);                                     // Search for a given number of conflicts.
     virtual lbool    solve_           (bool do_simp = true, bool turn_off_simp = false);                                                      // Main solve method (assumptions given in 'assumptions').
     virtual void     reduceDB         ();                                                      // Reduce the set of learnt clauses.
@@ -388,6 +391,8 @@ protected:
     unsigned int computeLBD(const vec<Lit> & lits,int end=-1);
     unsigned int computeLBD(const Clause &c);
     void minimisationWithBinaryResolution(vec<Lit> &out_learnt);
+
+    void minimizeDIPClause(vec<Lit> &dip_learnt);
 
     virtual void     relocAll         (ClauseAllocator& to);
 

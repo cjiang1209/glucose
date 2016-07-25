@@ -77,6 +77,7 @@ void printStats(Solver& solver)
     printf("c nb learnts DL2        : %" PRIu64"\n", solver.nbDL2);
     printf("c nb learnts size 2     : %" PRIu64"\n", solver.nbBin);
     printf("c nb learnts size 1     : %" PRIu64"\n", solver.nbUn);
+    printf("c nb DIP Clauses        : %" PRIu64"\n", solver.nbDipClauses);
 
     printf("c conflicts             : %-12" PRIu64"   (%.0f /sec)\n", solver.conflicts   , solver.conflicts   /cpu_time);
     printf("c decisions             : %-12" PRIu64"   (%4.2f %% random) (%.0f /sec)\n", solver.decisions, (float)solver.rnd_decisions*100 / (float)solver.decisions, solver.decisions   /cpu_time);
