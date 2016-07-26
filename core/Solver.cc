@@ -809,7 +809,7 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt,vec<Lit>&selectors, int& o
 
         if (!done && pathC == 2) {
         	int idx = index;
-        	while (seen[var(trail[idx--])] == 0);
+        	while (!seen[var(trail[idx--])]);
         	Lit p2 = trail[idx + 1];
         	if (seen[var(p)] + seen[var(p2)] > 2) {
         		dip_learnt[0] = ~p2;
@@ -892,6 +892,9 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt,vec<Lit>&selectors, int& o
     	learnts.push(cr);
     	attachClause(cr);
     	claBumpActivity(ca[cr]);
+
+    	varBumpActivity(var(dip_learnt[0]));
+    	varBumpActivity(var(dip_learnt[1]));
 
     	nbDipClauses++;
     }
