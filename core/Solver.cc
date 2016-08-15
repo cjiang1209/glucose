@@ -726,6 +726,8 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt,vec<Lit>&selectors, int& o
     int pathC = 0;
     Lit p = lit_Undef;
 
+    int depth0 = 0;	// Depth of UIP clause
+    int depth1 = 0; // Depth of DIP clause
 
     bool done = false;
     vec<Lit> dip_learnt;
@@ -737,6 +739,11 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt,vec<Lit>&selectors, int& o
     out_learnt.push(); // (leave room for the asserting literal)
     int index = trail.size() - 1;
     do {
+    	depth0++;
+    	if (!done) {
+    		depth1++;
+    	}
+
         assert(confl != CRef_Undef); // (otherwise should be UIP)
         Clause& c = ca[confl];
         // Special case for binary clauses
@@ -807,7 +814,8 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt,vec<Lit>&selectors, int& o
         while (!seen[var(trail[index--])]);
         p = trail[index + 1];
 
-        if (!done && pathC == 2) {
+        if (!done && pathC == 2 && depth1 >= 10) {
+//        if (!done && pathC == 2) {
         	int idx = index;
         	while (!seen[var(trail[idx--])]);
         	Lit p2 = trail[idx + 1];
@@ -877,7 +885,8 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt,vec<Lit>&selectors, int& o
     }
 
     // Add DIP Clause
-    if (done && dip_learnt[0] != out_learnt[0]) {
+    if (done && (depth0 - depth1 >= 10) && (dip_learnt[0] != out_learnt[0])) {
+//    if (done && (dip_learnt[0] != out_learnt[0])) {
     	assert(dip_learnt[1] != out_learnt[0]);
     	minimizeDIPClause(dip_learnt);
 
@@ -897,6 +906,20 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt,vec<Lit>&selectors, int& o
     	varBumpActivity(var(dip_learnt[1]));
 
     	nbDipClauses++;
+
+//    	printf("DIP (Depth: %d):", depth1);
+//    	for (int i = 0; i < dip_learnt.size(); i++) {
+//    		Lit lit = dip_learnt[i];
+//    		printf(" %d", sign(lit) ? -var(lit) : var(lit));
+//    	}
+//    	printf("\n");
+//
+//    	printf("UIP (Depth: %d):", depth0);
+//    	for (int i = 0; i < out_learnt.size(); i++) {
+//    		Lit lit = out_learnt[i];
+//    		printf(" %d", sign(lit) ? -var(lit) : var(lit));
+//    	}
+//    	printf("\n");
     }
 
     // Find correct backtrack level:
