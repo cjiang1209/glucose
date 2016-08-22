@@ -726,8 +726,8 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt,vec<Lit>&selectors, int& o
     int pathC = 0;
     Lit p = lit_Undef;
 
-    int depth0 = 0;	// Depth of UIP clause
-    int depth1 = 0; // Depth of DIP clause
+//    int depth0 = 0;	// Depth of UIP clause
+//    int depth1 = 0; // Depth of DIP clause
 
     bool done = false;
     vec<Lit> dip_learnt;
@@ -739,10 +739,10 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt,vec<Lit>&selectors, int& o
     out_learnt.push(); // (leave room for the asserting literal)
     int index = trail.size() - 1;
     do {
-    	depth0++;
-    	if (!done) {
-    		depth1++;
-    	}
+//    	depth0++;
+//    	if (!done) {
+//    		depth1++;
+//    	}
 
         assert(confl != CRef_Undef); // (otherwise should be UIP)
         Clause& c = ca[confl];
@@ -814,12 +814,13 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt,vec<Lit>&selectors, int& o
         while (!seen[var(trail[index--])]);
         p = trail[index + 1];
 
-        if (!done && pathC == 2 && depth1 >= 10) {
-//        if (!done && pathC == 2) {
+        //if (!done && pathC == 2 && depth1 >= 10) {
+        if (!done && pathC == 2 && seen[var(p)] >= 2) {
         	int idx = index;
         	while (!seen[var(trail[idx--])]);
         	Lit p2 = trail[idx + 1];
-        	if (seen[var(p)] + seen[var(p2)] > 2) {
+//        	if (seen[var(p)] + seen[var(p2)] > 2) {
+        	if (seen[var(p2)] >= 2) {
         		dip_learnt[0] = ~p2;
         		dip_learnt[1] = ~p;
         		done = true;
@@ -885,8 +886,8 @@ void Solver::analyze(CRef confl, vec<Lit>& out_learnt,vec<Lit>&selectors, int& o
     }
 
     // Add DIP Clause
-    if (done && (depth0 - depth1 >= 10) && (dip_learnt[0] != out_learnt[0])) {
-//    if (done && (dip_learnt[0] != out_learnt[0])) {
+//    if (done && (depth0 - depth1 >= 10) && (dip_learnt[0] != out_learnt[0])) {
+    if (done && (dip_learnt[0] != out_learnt[0])) {
     	assert(dip_learnt[1] != out_learnt[0]);
     	minimizeDIPClause(dip_learnt);
 
