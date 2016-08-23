@@ -96,6 +96,7 @@ void Force::execute(vec<Var>& order)
     		sum_span += (top - bottom);
     	}
     	if (sum_span < best_sum_span) {
+    		best_sum_span = sum_span;
     		best_idx_or_var.assign(idx_of_var.begin(), idx_of_var.end());
     	}
     }
